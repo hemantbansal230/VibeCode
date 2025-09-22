@@ -50,6 +50,24 @@
         .alert-panel.visible {
             opacity: 1;
         }
+        /* New CSS for the gravity effect */
+        .gravity-drop {
+            animation: drop-bounce 1s ease-out forwards;
+        }
+        @keyframes drop-bounce {
+            0% {
+                transform: translateY(0);
+            }
+            80% {
+                transform: translateY(calc(100vh - 100%));
+            }
+            90% {
+                transform: translateY(calc(100vh - 100% + 20px));
+            }
+            100% {
+                transform: translateY(calc(100vh - 100%));
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -58,9 +76,12 @@
 
     <div class="relative z-10 p-4">
         <div class="absolute top-4 left-4 right-4 ui-panel flex flex-col md:flex-row justify-between items-start md:items-center p-4 rounded-xl shadow-lg">
-            <div class="mb-4 md:mb-0">
-                <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Infinity Orbit</h1>
-                <p class="text-gray-400 text-sm mt-1">A real-time predictive model of orbital debris.</p>
+            <div class="mb-4 md:mb-0 flex items-center space-x-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Infinity Orbit</h1>
+                    <p class="text-gray-400 text-sm mt-1">A real-time predictive model of orbital debris.</p>
+                </div>
+                <button id="gravityBtn" class="p-2 px-4 bg-purple-600 rounded-lg shadow-md hover:bg-purple-700 transition-colors hidden md:block">Gravity Mode</button>
             </div>
             
             <div class="flex flex-col md:flex-row items-start md:items-center space-y-2 md:space-y-0 md:space-x-6 text-sm">
@@ -91,7 +112,6 @@
                 </div>
             </div>
             <button id="kesslerBtn" class="w-full sm:w-auto p-2 px-4 bg-red-600 rounded-lg shadow-md hover:bg-red-700 transition-colors">Trigger Kessler Event</button>
-            <button id="gravityBtn" class="w-full sm:w-auto p-2 px-4 bg-purple-600 rounded-lg shadow-md hover:bg-purple-700 transition-colors">Gravity Mode</button>
         </div>
 
         <div id="object-info" class="absolute bottom-4 left-4 right-4 z-10 p-4 rounded-xl shadow-lg info-panel ui-panel">
@@ -382,9 +402,21 @@
             let simulationSpeed = 1;
             let kesslerTriggered = false;
             let gravityMode = false;
-            const floor = -5000; // A virtual floor for the bounce effect
-            const gravity = new THREE.Vector3(0, -100, 0); // A constant downward force
             
+            function dropSections() {
+                const sections = document.querySelectorAll('.content-section');
+                sections.forEach(section => {
+                    section.classList.add('gravity-drop');
+                });
+            }
+            
+            function restoreSections() {
+                const sections = document.querySelectorAll('.content-section');
+                sections.forEach(section => {
+                    section.classList.remove('gravity-drop');
+                });
+            }
+
             // Event listener for the Play/Pause button
             playPauseBtn.addEventListener('click', () => {
                 isPaused = !isPaused;
@@ -407,20 +439,10 @@
                 gravityMode = !gravityMode;
                 if (gravityMode) {
                     gravityBtn.textContent = 'Orbital Mode';
-                    // Pause the simulation when entering gravity mode
-                    isPaused = false; 
-                    playIcon.classList.add('hidden');
-                    pauseIcon.classList.remove('hidden');
+                    dropSections(); // Call the new function
                 } else {
                     gravityBtn.textContent = 'Gravity Mode';
-                    // Reset positions and velocities to original values
-                    orbitalObjects.forEach(obj => {
-                        const mesh = meshes[obj.id];
-                        if (mesh) {
-                            obj.position.copy(obj.originalPosition);
-                            obj.velocity.copy(obj.originalVelocity);
-                        }
-                    });
+                    restoreSections(); // Restore the sections
                 }
             });
 
@@ -501,20 +523,11 @@
                 orbitalObjects.forEach(obj => {
                     const mesh = meshes[obj.id];
                     if (mesh) {
-                        // Apply different physics based on the mode
-                        if (gravityMode) {
-                            // Apply gravity and check for bounce
-                            obj.velocity.add(gravity.clone().multiplyScalar(simulationSpeed));
-                            if (obj.position.y <= floor && obj.velocity.y < 0) {
-                                obj.velocity.y *= -0.8; // Bounce with energy loss
-                            }
-                        } else {
-                            // Orbital physics
-                            const distanceSq = obj.position.lengthSq();
-                            const forceDirection = new THREE.Vector3().copy(obj.position).negate().normalize();
-                            const acceleration = forceDirection.multiplyScalar(G * M / distanceSq);
-                            obj.velocity.add(acceleration.multiplyScalar(0.0001)); 
-                        }
+                        // Orbital physics
+                        const distanceSq = obj.position.lengthSq();
+                        const forceDirection = new THREE.Vector3().copy(obj.position).negate().normalize();
+                        const acceleration = forceDirection.multiplyScalar(G * M / distanceSq);
+                        obj.velocity.add(acceleration.multiplyScalar(0.0001)); 
                         
                         obj.position.add(obj.velocity.clone().multiplyScalar(simulationSpeed));
                         
