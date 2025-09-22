@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinity Orbit: Predictive Debris Tracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            background: #0d0f1c;
+            color: #e0e7ff;
+            touch-action: none;
+        }
+        #three-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+        }
+        .ui-panel {
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(8px);
+        }
+        .content-section {
+            padding: 4rem 1rem;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .info-panel {
+            transform: translateY(100%);
+            opacity: 0;
+            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+        }
+        .info-panel.visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .alert-panel {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .alert-panel.visible {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <div id="three-container"></div>
+
+    <div class="relative z-10 p-4">
+        <div class="absolute top-4 left-4 right-4 ui-panel flex flex-col md:flex-row justify-between items-start md:items-center p-4 rounded-xl shadow-lg">
+            <div class="mb-4 md:mb-0">
+                <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Infinity Orbit</h1>
+                <p class="text-gray-400 text-sm mt-1">A real-time predictive model of orbital debris.</p>
+            </div>
+            
+            <div class="flex flex-col md:flex-row items-start md:items-center space-y-2 md:space-y-0 md:space-x-6 text-sm">
+                <div class="flex items-center space-x-2">
+                    <span class="w-4 h-4 rounded-full bg-green-500 shadow-md"></span>
+                    <span>Active Satellite</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="w-4 h-4 rounded-full bg-yellow-500 shadow-md"></span>
+                    <span>Meteors & Debris</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="w-4 h-4 rounded-full bg-red-500 shadow-md animate-pulse"></span>
+                    <span>High-Risk Debris</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="absolute bottom-4 left-4 right-4 ui-panel p-4 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0 sm:space-x-4">
+            <div class="flex items-center space-x-2 w-full sm:w-auto">
+                <button id="playPauseBtn" class="p-2 bg-blue-600 rounded-lg shadow-md hover:bg-blue-700 transition-colors">
+                    <svg id="playIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.192A1 1 0 0115.5 12a1 1 0 01-.748.808l-5.733 3.66A1 1 0 018 16.5V7.5a1 1 0 011.02-.768l5.732 3.66z"></path></svg>
+                    <svg id="pauseIcon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m4-6v6m-4-6v6z"></path></svg>
+                </button>
+                <div class="flex-1">
+                    <label for="speed-slider" class="text-sm">Simulation Speed</label>
+                    <input type="range" id="speed-slider" min="0.1" max="5" value="1" step="0.1" class="w-full h-2 rounded-lg appearance-none cursor-pointer bg-gray-600">
+                </div>
+            </div>
+            <button id="kesslerBtn" class="w-full sm:w-auto p-2 px-4 bg-red-600 rounded-lg shadow-md hover:bg-red-700 transition-colors">Trigger Kessler Event</button>
+            <button id="gravityBtn" class="w-full sm:w-auto p-2 px-4 bg-purple-600 rounded-lg shadow-md hover:bg-purple-700 transition-colors">Gravity Mode</button>
+        </div>
+
+        <div id="object-info" class="absolute bottom-4 left-4 right-4 z-10 p-4 rounded-xl shadow-lg info-panel ui-panel">
+            <h2 class="text-2xl font-bold">Object Information</h2>
+            <p id="object-name" class="text-xl mt-2 font-semibold"></p>
+            <p id="object-type" class="text-gray-400 text-sm"></p>
+            <div class="mt-4 text-sm space-y-2">
+                <p><strong>Position:</strong> <span id="object-position"></span></p>
+                <p><strong>Collision Risk:</strong> <span id="object-risk"></span></p>
+                <p id="object-velocity"><strong>Velocity:</strong> <span id="object-velocity-val"></span></p>
+            </div>
+        </div>
+
+        <div id="alert-panel" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 p-6 bg-red-800 text-white rounded-xl shadow-2xl alert-panel">
+            <h2 class="text-2xl font-bold text-center">COLLISION ALERT!</h2>
+            <p class="mt-2 text-lg text-center font-mono">A catastrophic event has occurred! New debris created.</p>
+        </div>
+    </div>
+    
+    <main class="relative z-10 min-h-screen pt-[100vh]">
+        <section id="introduction" class="content-section bg-gray-900 text-center">
+            <div class="max-w-4xl mx-auto">
+                <h2 class="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-4">Research Meets Infinity</h2>
+                <p class="text-lg sm:text-xl text-gray-300 leading-relaxed">
+                    Our project visualizes the ever-growing problem of space debris using a predictive model. As humanity continues to launch satellites into orbit, the risk of a catastrophic chain reaction—known as the *Kessler Syndrome*—increases. This tool helps us understand the vastness and complexity of this challenge.
+                </p>
+            </div>
+        </section>
+
+        <section id="how-it-works" class="content-section bg-gray-800">
+            <div class="max-w-4xl mx-auto">
+                <h2 class="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-500 mb-6">How Our Predictive Model Works</h2>
+                <div class="space-y-8 text-gray-300">
+                    <div>
+                        <h3 class="text-2xl font-bold mb-2">1. Data Integration 📡</h3>
+                        <p>
+                            We simulate ingesting real-world orbital data (like TLEs from NASA and ESA). This data includes the position and velocity of every tracked object, from active satellites to tiny pieces of discarded rocket parts.
+                        </p>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold mb-2">2. Trajectory Prediction 📈</h3>
+                        <p>
+                            Our model calculates the future orbital paths of each object. By applying a simplified form of gravitational physics, we can predict where each piece of debris will be and identify potential high-risk collision zones.
+                        </p>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold mb-2">3. Visualizing Threats 🚨</h3>
+                        <p>
+                            This visualization tool turns complex data into an intuitive, interactive experience. We use color-coding to highlight threats: green for active satellites, yellow for harmless debris, and a pulsating *red* for debris on a collision course.
+                        </p>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold mb-2">4. Simulating the Future 💥</h3>
+                        <p>
+                            The "Trigger Kessler Event" button allows you to see the worst-case scenario. It simulates a major collision and shows how a chain reaction can quickly make an orbital highway unusable.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="about" class="content-section bg-gray-900 text-center">
+            <div class="max-w-4xl mx-auto">
+                <h2 class="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 mb-4">About the Project</h2>
+                <p class="text-lg sm:text-xl text-gray-300 leading-relaxed">
+                    This project was created for the "Research and Innovation Meets Infinity" coding event. It serves as both a tool for education and a proof-of-concept for how a predictive model could be used to address one of the most pressing issues in modern space exploration.
+                </p>
+            </div>
+        </section>
+
+        <footer class="bg-gray-800 bg-opacity-70 text-center text-sm text-gray-400 p-4">
+            <p>&copy; 2025 Infinity Orbit. All rights reserved.</p>
+        </footer>
+    </main>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Self-contained anonymous function to encapsulate all logic
+        (async () => {
+            const THREE = window.THREE;
+            const OrbitControls = window.THREE.OrbitControls;
+
+            // Constants for a more realistic simulation
+            const NUM_DEBRIS = 800;
+            const NUM_METEORS = 20;
+            const NUM_SATELLITES = 75;
+            const EARTH_RADIUS = 6371; // in km
+            const LEO_MIN_ALT = 500;
+            const LEO_MAX_ALT = 2000;
+            const ORBIT_MIN_RADIUS = EARTH_RADIUS + LEO_MIN_ALT;
+            const ORBIT_MAX_RADIUS = EARTH_RADIUS + LEO_MAX_ALT;
+            const G = 6.67430e-11; // Gravitational constant (m³/kg s²)
+            const M = 5.972e24;    // Earth's mass (kg)
+            
+            // THREE.js setup
+            const threeContainer = document.getElementById('three-container');
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 50000);
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            threeContainer.appendChild(renderer.domElement);
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0x555555);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(1, 0, 0);
+            scene.add(directionalLight);
+
+            // Add OrbitControls
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            camera.position.z = 15000;
+
+            // Earth model with textures
+            const textureLoader = new THREE.TextureLoader();
+            const earthDayTexture = textureLoader.load('https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg');
+            const earthNightTexture = textureLoader.load('https://threejs.org/examples/textures/planets/earth_lights_2048.png');
+            const earthSpecularTexture = textureLoader.load('https://threejs.org/examples/textures/planets/earth_specular_2048.jpg');
+            const earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 64, 64);
+            const earthMaterial = new THREE.MeshPhongMaterial({
+                color: 0x888888,
+                map: earthDayTexture,
+                specularMap: earthSpecularTexture,
+                specular: new THREE.Color(0x333333)
+            });
+            const earth = new THREE.Mesh(earthGeometry, earthMaterial);
+            scene.add(earth);
+            
+
+            // Cloud layer
+            const cloudTexture = textureLoader.load('https://threejs.org/examples/textures/planets/earth_clouds_1024.png');
+            const cloudMaterial = new THREE.MeshLambertMaterial({
+                map: cloudTexture,
+                transparent: true,
+                opacity: 0.8
+            });
+            const clouds = new THREE.Mesh(
+                new THREE.SphereGeometry(EARTH_RADIUS + 2, 64, 64),
+                cloudMaterial
+            );
+            scene.add(clouds);
+
+            // Atmosphere
+            const atmosphereShader = {
+                uniforms: {
+                    'c': { type: 'f', value: 0.7 },
+                    'p': { type: 'f', value: 6.0 },
+                    glowColor: { type: 'c', value: new THREE.Color(0x00aaff) },
+                    viewVector: { type: 'v3', value: new THREE.Vector3() }
+                },
+                vertexShader: `
+                    uniform vec3 viewVector;
+                    uniform float c;
+                    uniform float p;
+                    varying float intensity;
+                    void main() {
+                        vec3 vNormal = normalize( normalMatrix * normal );
+                        vec3 vNormel = normalize( normalMatrix * viewVector );
+                        intensity = pow(c - dot(vNormal, vNormel), p);
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 glowColor;
+                    varying float intensity;
+                    void main() {
+                        vec3 glow = glowColor * intensity;
+                        gl_FragColor = vec4( glow, 1.0 );
+                    }
+                `
+            };
+            const atmosphereMaterial = new THREE.ShaderMaterial({
+                uniforms: atmosphereShader.uniforms,
+                vertexShader: atmosphereShader.vertexShader,
+                fragmentShader: atmosphereShader.fragmentShader,
+                side: THREE.BackSide,
+                blending: THREE.AdditiveBlending,
+                transparent: true
+            });
+            const atmosphere = new THREE.Mesh(
+                new THREE.SphereGeometry(EARTH_RADIUS + 20, 64, 64),
+                atmosphereMaterial
+            );
+            scene.add(atmosphere);
+
+            // Particle system for a starry background
+            const starsGeometry = new THREE.BufferGeometry();
+            const starsVertices = [];
+            for (let i = 0; i < 10000; i++) {
+                const x = THREE.MathUtils.randFloatSpread(40000);
+                const y = THREE.MathUtils.randFloatSpread(40000);
+                const z = THREE.MathUtils.randFloatSpread(40000);
+                starsVertices.push(x, y, z);
+            }
+            starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+            const starsMaterial = new THREE.PointsMaterial({ color: 0xcccccc, size: 5 });
+            const stars = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(stars);
+
+            // Function to generate a random position in a spherical shell
+            function generateOrbitalPosition(minRadius, maxRadius) {
+                const radius = Math.random() * (maxRadius - minRadius) + minRadius;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(Math.random() * 2 - 1);
+                
+                const x = radius * Math.sin(phi) * Math.cos(theta);
+                const y = radius * Math.sin(phi) * Math.sin(theta);
+                const z = radius * Math.cos(phi);
+
+                return new THREE.Vector3(x, y, z);
+            }
+            
+            // Function to generate dummy orbital data
+            function generateObjects() {
+                const objects = [];
+                // Generate active satellites
+                for (let i = 0; i < NUM_SATELLITES; i++) {
+                    const position = generateOrbitalPosition(ORBIT_MIN_RADIUS, ORBIT_MIN_RADIUS + 200);
+                    const velocity = new THREE.Vector3(Math.random() * 10 - 5, Math.random() * 10 - 5, Math.random() * 10 - 5);
+                    const risk = 'low';
+                    objects.push({ id: `sat-${i}`, name: `Satellite-${i}`, type: 'satellite', position: position, velocity: velocity, risk: risk });
+                }
+                // Generate debris
+                for (let i = 0; i < NUM_DEBRIS; i++) {
+                    const position = generateOrbitalPosition(ORBIT_MIN_RADIUS, ORBIT_MAX_RADIUS);
+                    const velocity = new THREE.Vector3(Math.random() * 50 - 25, Math.random() * 50 - 25, Math.random() * 50 - 25);
+                    const risk = ['low', 'medium', 'high'][Math.floor(Math.random() * 3)];
+                    objects.push({ id: `deb-${i}`, name: `Debris-${i}`, type: 'debris', position: position, velocity: velocity, risk: risk });
+                }
+                // Generate meteors with a simple trajectory towards Earth
+                for (let i = 0; i < NUM_METEORS; i++) {
+                    const position = generateOrbitalPosition(ORBIT_MAX_RADIUS + 5000, ORBIT_MAX_RADIUS + 10000);
+                    const velocity = new THREE.Vector3().copy(position).negate().normalize().multiplyScalar(Math.random() * 100 + 50);
+                    objects.push({ id: `met-${i}`, name: `Meteor-${i}`, type: 'meteor', position: position, velocity: velocity, risk: 'low' });
+                }
+                return objects;
+            }
+
+            const orbitalObjects = generateObjects();
+            const meshes = {};
+            
+            // Function to create meshes from data
+            function createMeshes() {
+                orbitalObjects.forEach(obj => {
+                    let mesh;
+                    let color;
+                    let size;
+
+                    if (obj.type === 'satellite') {
+                        color = 0x00ff00; // Green for satellites
+                        size = 50;
+                    } else if (obj.type === 'meteor') {
+                        color = 0xffff00; // Yellow for meteors
+                        size = 30;
+                    } else { // debris
+                        size = 25;
+                        if (obj.risk === 'high') {
+                            color = 0xff0000; // Red for high-risk debris
+                        } else {
+                            color = 0xffff00; // Yellow for all other debris (low/medium)
+                        }
+                    }
+
+                    const geometry = new THREE.SphereGeometry(size, 8, 8);
+                    const material = new THREE.MeshBasicMaterial({ color: color });
+                    mesh = new THREE.Mesh(geometry, material);
+                    mesh.position.copy(obj.position);
+                    mesh.userData = { id: obj.id, name: obj.name, type: obj.type, risk: obj.risk, velocity: obj.velocity, originalPosition: new THREE.Vector3().copy(obj.position), originalVelocity: new THREE.Vector3().copy(obj.velocity) }; // Store data on the mesh
+                    scene.add(mesh);
+                    meshes[obj.id] = mesh;
+                });
+            }
+
+            // UI Elements
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const playIcon = document.getElementById('playIcon');
+            const pauseIcon = document.getElementById('pauseIcon');
+            const speedSlider = document.getElementById('speed-slider');
+            const kesslerBtn = document.getElementById('kesslerBtn');
+            const gravityBtn = document.getElementById('gravityBtn');
+            const infoPanel = document.getElementById('object-info');
+            const alertPanel = document.getElementById('alert-panel');
+            let isPaused = false;
+            let simulationSpeed = 1;
+            let kesslerTriggered = false;
+            let gravityMode = false;
+            const floor = -5000; // A virtual floor for the bounce effect
+            const gravity = new THREE.Vector3(0, -100, 0); // A constant downward force
+            
+            // Event listener for the Play/Pause button
+            playPauseBtn.addEventListener('click', () => {
+                isPaused = !isPaused;
+                if (isPaused) {
+                    playIcon.classList.remove('hidden');
+                    pauseIcon.classList.add('hidden');
+                } else {
+                    playIcon.classList.add('hidden');
+                    pauseIcon.classList.remove('hidden');
+                }
+            });
+
+            // Event listener for the speed slider
+            speedSlider.addEventListener('input', (e) => {
+                simulationSpeed = parseFloat(e.target.value);
+            });
+
+            // Event listener for the Gravity Mode button
+            gravityBtn.addEventListener('click', () => {
+                gravityMode = !gravityMode;
+                if (gravityMode) {
+                    gravityBtn.textContent = 'Orbital Mode';
+                    // Pause the simulation when entering gravity mode
+                    isPaused = false; 
+                    playIcon.classList.add('hidden');
+                    pauseIcon.classList.remove('hidden');
+                } else {
+                    gravityBtn.textContent = 'Gravity Mode';
+                    // Reset positions and velocities to original values
+                    orbitalObjects.forEach(obj => {
+                        const mesh = meshes[obj.id];
+                        if (mesh) {
+                            obj.position.copy(obj.originalPosition);
+                            obj.velocity.copy(obj.originalVelocity);
+                        }
+                    });
+                }
+            });
+
+            // Event listener for the "Trigger Kessler Event" button
+            kesslerBtn.addEventListener('click', () => {
+                if (!kesslerTriggered) {
+                    kesslerTriggered = true;
+                    // Find a satellite and a high-risk debris to collide
+                    const satToCollide = orbitalObjects.find(o => o.type === 'satellite');
+                    const debrisToCollide = orbitalObjects.find(o => o.risk === 'high');
+                    
+                    if (satToCollide && debrisToCollide) {
+                        const satMesh = meshes[satToCollide.id];
+                        const debrisMesh = meshes[debrisToCollide.id];
+                        if (satMesh && debrisMesh) {
+                            // Place them on a collision course
+                            satMesh.position.set(0, 7000, 0);
+                            debrisMesh.position.set(200, 7000, 200);
+                            satToCollide.velocity.set(0, 0, 50);
+                            debrisToCollide.velocity.set(0, 0, -50);
+                        }
+                    }
+                    alertPanel.classList.add('visible');
+                    setTimeout(() => {
+                        alertPanel.classList.remove('visible');
+                        // Create a huge debris cloud
+                        for (let i = 0; i < 500; i++) {
+                            const position = satToCollide.position;
+                            const velocity = new THREE.Vector3(Math.random() * 200 - 100, Math.random() * 200 - 100, Math.random() * 200 - 100);
+                            const debrisGeometry = new THREE.SphereGeometry(15, 8, 8);
+                            const debrisMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                            const newDebris = new THREE.Mesh(debrisGeometry, debrisMaterial);
+                            newDebris.position.copy(position);
+                            newDebris.userData = { id: `kessler-${i}`, name: `Kessler-Debris-${i}`, type: 'debris', risk: 'high', velocity: velocity };
+                            scene.add(newDebris);
+                            orbitalObjects.push({ id: newDebris.userData.id, ...newDebris.userData });
+                        }
+                        // Remove the original objects
+                        scene.remove(satMesh);
+                        scene.remove(debrisMesh);
+                    }, 2000);
+                }
+            });
+            
+            // Raycaster for click events
+            const raycaster = new THREE.Raycaster();
+            const pointer = new THREE.Vector2();
+
+            function onPointerMove(event) {
+                pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+                pointer.y = - (event.clientY / window.innerHeight) * 2 + 1;
+            }
+
+            function onPointerClick() {
+                raycaster.setFromCamera(pointer, camera);
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                if (intersects.length > 0) {
+                    const intersectedObject = intersects[0].object;
+                    if (intersectedObject.userData && intersectedObject.userData.name) {
+                        const data = intersectedObject.userData;
+                        document.getElementById('object-name').textContent = data.name;
+                        document.getElementById('object-type').textContent = data.type === 'satellite' ? 'Active Satellite' : (data.type === 'meteor' ? 'Meteor' : 'Space Debris');
+                        document.getElementById('object-position').textContent = `X: ${data.position.x.toFixed(2)}, Y: ${data.position.y.toFixed(2)}, Z: ${data.position.z.toFixed(2)}`;
+                        document.getElementById('object-risk').textContent = data.risk.charAt(0).toUpperCase() + data.risk.slice(1);
+                        document.getElementById('object-velocity-val').textContent = `X: ${data.velocity.x.toFixed(2)}, Y: ${data.velocity.y.toFixed(2)}, Z: ${data.velocity.z.toFixed(2)}`;
+                        
+                        infoPanel.classList.add('visible');
+                    }
+                } else {
+                    infoPanel.classList.remove('visible');
+                }
+            }
+
+            // Function to simulate movement
+            function simulate() {
+                if (isPaused) return;
+
+                orbitalObjects.forEach(obj => {
+                    const mesh = meshes[obj.id];
+                    if (mesh) {
+                        // Apply different physics based on the mode
+                        if (gravityMode) {
+                            // Apply gravity and check for bounce
+                            obj.velocity.add(gravity.clone().multiplyScalar(simulationSpeed));
+                            if (obj.position.y <= floor && obj.velocity.y < 0) {
+                                obj.velocity.y *= -0.8; // Bounce with energy loss
+                            }
+                        } else {
+                            // Orbital physics
+                            const distanceSq = obj.position.lengthSq();
+                            const forceDirection = new THREE.Vector3().copy(obj.position).negate().normalize();
+                            const acceleration = forceDirection.multiplyScalar(G * M / distanceSq);
+                            obj.velocity.add(acceleration.multiplyScalar(0.0001)); 
+                        }
+                        
+                        obj.position.add(obj.velocity.clone().multiplyScalar(simulationSpeed));
+                        
+                        mesh.position.copy(obj.position);
+                        mesh.userData.position = obj.position; 
+                        mesh.userData.velocity = obj.velocity; 
+
+                        // Check for meteor entering the atmosphere
+                        if (obj.type === 'meteor' && obj.position.length() < EARTH_RADIUS + 100) {
+                            scene.remove(mesh);
+                            delete meshes[obj.id];
+                            orbitalObjects.splice(orbitalObjects.indexOf(obj), 1);
+                        }
+                    }
+                });
+
+                // Simplified collision check
+                if (!kesslerTriggered) {
+                    orbitalObjects.forEach(objA => {
+                        if (objA.risk === 'high') {
+                            orbitalObjects.forEach(objB => {
+                                if (objA !== objB && objA.position.distanceTo(objB.position) < 200) {
+                                    alertPanel.classList.add('visible');
+                                    setTimeout(() => alertPanel.classList.remove('visible'), 5000);
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                earth.rotation.y += 0.001; 
+                clouds.rotation.y += 0.0015; 
+                
+                const viewVector = new THREE.Vector3().subVectors(camera.position, earth.position);
+                atmosphere.material.uniforms.viewVector.value = viewVector;
+
+                simulate();
+                renderer.render(scene, camera);
+            }
+
+            // Handle window resizing
+            window.addEventListener('resize', () => {
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                renderer.setSize(width, height);
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+            });
+
+            window.addEventListener('click', onPointerClick);
+            window.addEventListener('mousemove', onPointerMove);
+
+            createMeshes();
+            animate();
+        })();
+    </script>
+</body>
+</html>
